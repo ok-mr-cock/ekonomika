@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="cs"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kvíz – učitel</title><link rel="stylesheet" href="/style.css"></head>
+<body><main id="app"></main>
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const $=id=>document.getElementById(id), L='ABCD';
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const s=io();let st=null,off=0,authed=false,cfg={rounds:10,time:20,ids:null},msg='';
+s.on('connect',()=>{const p=sessionStorage.pw;if(p)s.emit('login',p);});
+s.on('loginok',()=>{authed=true;});
+s.on('err',m=>{msg=m;if(!authed)sessionStorage.removeItem('pw');draw();});
+s.on('state',v=>{st=v;off=v.now-Date.now();if(v.role==='teacher')authed=true;draw();});
+const stud=()=>location.origin+'/';
+function draw(){
+  const a=$('app'),v=st;if(!v)return;
+  if(!authed){
+    a.innerHTML=`<h1>Přihlášení učitele</h1><div class="panel"><label for="pw">Heslo</label><input id="pw" type="password">
+    <p class="err">${esc(msg)}</p><button id="go">Přihlásit</button></div>`;msg='';
+    const go=()=>{sessionStorage.pw=$('pw').value;s.emit('login',$('pw').value);};
+    $('go').onclick=go;$('pw').onkeydown=e=>{if(e.key==='Enter')go();};return;
+  }
+  if(v.phase==='none'){setup();return;}
+  const top=`<div class="row" style="align-items:center"><div class="mute">Žáků: ${v.n} · otázka ${Math.max(v.round,0)} z ${v.rounds} · limit ${v.time} s</div>
+  <button class="ghost" id="end" style="flex:0 0 auto">Ukončit hru</button></div>`;
+  let h='';
+  if(v.phase==='lobby'){
+    h=`<h1>Čekárna</h1><div class="panel">Žáci se připojí na adrese:<div class="big">${esc(stud())}</div></div>
+    <div class="panel names">${v.names.length?v.names.map(n=>`<span>${esc(n)}</span>`).join(''):'<span class="mute">Zatím nikdo.</span>'}</div>
+    <button id="nx">Spustit první otázku</button>`;
+  }else if(v.phase==='question'||v.phase==='reveal'){
+    const rv=v.phase==='reveal',mx=Math.max(1,...(v.counts||[1]));
+    h=`${rv?'':'<div class="timer" id="tm"></div><div class="bar"><i id="br"></i></div>'}
+    <div class="q">${esc(v.q.text)}</div>
+    <div class="answers">${v.q.answers.map((t,i)=>`<div class="ans a${i}${rv?(i===v.correct?' right':' dim'):''}"><b>${L[i]}</b><span>${esc(t)}</span>${rv?`<span class="cnt">${v.counts[i]}×</span>`:''}</div>`).join('')}</div>
+    <p class="mute">Odpovědělo ${v.answered} z ${v.n}</p>
+    <button id="nx">${rv?'Zobrazit pořadí':'Ukončit čas teď'}</button>`;
+  }else if(v.phase==='board'){
+    h=`<h1>${v.final?'Konečné pořadí':`Pořadí po ${v.round}. kole z ${v.rounds}`}</h1>
+    <div class="panel"><table><tr><th>#</th><th>Jméno</th><th class="n">+</th><th class="n">Body</th></tr>
+    ${v.board.map(p=>`<tr><td>${p.rank}</td><td>${esc(p.name)}</td><td class="n mute">${p.delta?'+'+p.delta:''}</td><td class="n">${p.score}</td></tr>`).join('')}</table></div>
+    <button id="nx">${v.final?'Nová hra':'Další otázka'}</button>`;
+  }
+  a.innerHTML=top+h;
+  $('end').onclick=()=>{if(confirm('Opravdu ukončit hru?'))s.emit('reset');};
+  $('nx').onclick=()=>s.emit(v.phase==='board'&&v.final?'reset':'next');
+  tick();
+}
+function setup(){
+  const v=st;if(cfg.ids===null)cfg.ids=v.topics.map(t=>t.id);
+  $('app').innerHTML=`<h1>Nová hra</h1>
+  <div class="panel"><h2>Témata</h2>
+  ${v.topics.length?`<div class="topics">${v.topics.map(t=>`<label><input type="checkbox" data-id="${t.id}" ${cfg.ids.includes(t.id)?'checked':''}>${esc(t.id+' '+t.title)} (${t.count})</label>`).join('')}</div>
+  <p class="mute" id="avail"></p>`:'<p>Nejsou nahrané žádné otázky. Nahraj soubor níž.</p>'}
+  <label for="up" style="margin-top:12px">Nahrát otázky (soubor .md exportovaný z dokumentu s kvízem)</label>
+  <input type="file" id="up" accept=".md,.txt,text/markdown,text/plain"></div>
+  <div class="panel"><div class="row"><div><label for="rounds">Počet kol</label><input id="rounds" type="number" min="1" value="${cfg.rounds}"></div>
+  <div><label for="time">Limit na odpověď (s)</label><input id="time" type="number" min="5" max="120" value="${cfg.time}"></div></div>
+  <p class="err">${esc(msg)}</p><button id="mk" ${v.topics.length?'':'disabled'}>Vytvořit hru</button></div>`;
+  msg='';
+  const read=()=>{cfg.ids=[...document.querySelectorAll('.topics input:checked')].map(i=>i.dataset.id);
+    cfg.rounds=+$('rounds').value;cfg.time=+$('time').value;
+    const n=v.topics.filter(t=>cfg.ids.includes(t.id)).reduce((x,t)=>x+t.count,0);
+    if($('avail'))$('avail').textContent='Dostupných otázek: '+n+(cfg.rounds>n?' (kol bude '+n+')':'');};
+  document.querySelectorAll('#app input').forEach(i=>i.oninput=read);read();
+  $('up').onchange=e=>{const f=e.target.files[0];if(f)f.text().then(t=>s.emit('upload',t));};
+  $('mk').onclick=()=>{read();s.emit('create',{ids:cfg.ids,rounds:cfg.rounds,time:cfg.time});};
+}
+function tick(){
+  if(!st||st.phase!=='question'||!$('tm'))return;
+  const rem=Math.max(0,(st.endsAt-(Date.now()+off))/1000);
+  $('tm').textContent=Math.ceil(rem);$('br').style.width=(100*rem/st.time)+'%';
+}
+setInterval(tick,100);
+</script></body></html>

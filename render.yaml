@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: kviz-ucitel
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: TEACHER_PASSWORD
+        sync: false
