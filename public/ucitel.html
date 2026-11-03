@@ -26,9 +26,12 @@ function draw(){
   <button class="ghost" id="end" style="flex:0 0 auto">Ukončit hru</button></div>`;
   let h='';
   if(v.phase==='lobby'){
-    h=`<h1>Čekárna</h1><div class="panel">Žáci se připojí na adrese:<div class="big">${esc(stud())}</div></div>
-    <div class="panel names">${v.names.length?v.names.map(n=>`<span>${esc(n)}</span>`).join(''):'<span class="mute">Zatím nikdo.</span>'}</div>
-    <button id="nx">Spustit první otázku</button>`;
+    h=`<h1>Čekárna</h1><div class="panel">Žáci se připojí na adrese:
+    <div class="big">${esc(stud())}</div>
+    <img class="pic" src="https://raw.githubusercontent.com/UZIVATEL/REPO/main/slozka/obrazek.png" alt="">
+  </div>
+  <div class="panel names">…</div>
+  <button id="nx">Spustit první otázku</button>`;
   }else if(v.phase==='question'||v.phase==='reveal'){
     const rv=v.phase==='reveal',mx=Math.max(1,...(v.counts||[1]));
     h=`${rv?'':'<div class="timer" id="tm"></div><div class="bar"><i id="br"></i></div>'}
